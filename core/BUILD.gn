@@ -1,6 +1,22 @@
+declare_args() {
+  extra_cflags = []
+  extra_cflags_c = []
+  extra_cflags_cc = []
+  extra_ldflags = []
+}
+
+
+config("extra_flags") {
+  cflags = extra_cflags
+  cflags_c = extra_cflags_c
+  cflags_cc = extra_cflags_cc
+  ldflags = extra_ldflags
+}
+
 executable("test") {
   sources = [ "src/tests/helloworld.cpp" ]
-
+  libs = [
+  ]
   deps = [
   ]
 }

@@ -1,5 +1,9 @@
 out
 
+# Python Virtual Environment
+
+venv
+
 # OS generated files #
 ######################
 .DS_Store
