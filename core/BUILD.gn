@@ -1,0 +1,6 @@
+executable("test") {
+  sources = [ "src/tests/helloworld.cpp" ]
+
+  deps = [
+  ]
+}
