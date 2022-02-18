@@ -13,10 +13,46 @@ config("extra_flags") {
   ldflags = extra_ldflags
 }
 
-executable("test") {
-  sources = [ "src/tests/helloworld.cpp" ]
+# executable("test") {
+#   sources = [
+#     "src/tests/helloworld.cpp"
+#   ]
+#   cflags_cc = [
+#     "-std=c++11"
+#   ]
+#   libs = [
+#   ]
+#   deps = [
+#   ]
+# }
+
+shared_library("core") {
+
+  pybind_headers = exec_script(
+    "gn/pybind11_headers.py", [], "trim list lines"
+  )
+  python_ldflags = exec_script(
+    "gn/python_ldflags.py", [], "trim list lines"
+  )
+  python_ext_suffix = exec_script(
+    "gn/python_ext_suffix.py", [], "trim string"
+  )
+  sources = [
+    "src/tests/bindlib.cpp"
+  ]
+  cflags_cc = [
+    "-fno-strict-aliasing",
+    "-O3",
+    "-Wall",
+    "-std=c++11"
+  ]
+  ldflags = []
+  cflags_cc += pybind_headers
+  ldflags += python_ldflags
   libs = [
+    "python3.8"
   ]
-  deps = [
-  ]
+  output_name = string_join("", ["core", python_ext_suffix])
+  output_prefix_override = true
+  output_extension = ""
 }
