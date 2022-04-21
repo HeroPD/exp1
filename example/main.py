@@ -1,4 +1,3 @@
-import core
+import exp1
 
-print(core.add(1, 3))
-print('imported')
+exp1.test()

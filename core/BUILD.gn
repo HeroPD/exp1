@@ -38,7 +38,7 @@ shared_library("core") {
     "gn/python_ext_suffix.py", [], "trim string"
   )
   sources = [
-    "src/tests/bindlib.cpp"
+    "src/tests/core.cpp"
   ]
   cflags_cc = [
     "-fno-strict-aliasing",
