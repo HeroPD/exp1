@@ -5,7 +5,7 @@
 toolchain("gcc") {
   tool("cc") {
     depfile = "{{output}}.d"
-    command = "gcc -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} -c {{source}} -o {{output}}"
+    command = "gcc -MD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} -c {{source}} -o {{output}}"
     depsformat = "gcc"
     description = "CC {{output}}"
     outputs =
@@ -14,66 +14,108 @@ toolchain("gcc") {
 
   tool("cxx") {
     depfile = "{{output}}.d"
-    command = "g++ -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} -c {{source}} -o {{output}}"
+    command = "g++ -MD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} -c {{source}} -o {{output}}"
     depsformat = "gcc"
     description = "CXX {{output}}"
     outputs =
         [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ]
   }
 
+  tool("objc") {
+    depfile = "{{output}}.d"
+    command = "g++ -MD -MF $depfile {{defines}} {{include_dirs}} {{framework_dirs}} {{cflags}} {{cflags_cc}} {{cflags_objc}}  -c {{source}} -o {{output}}"
+    depsformat = "gcc"
+    description = "objc {{output}}"
+    outputs =
+        [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ]
+  }
+
+  tool("objcxx") {
+    depfile = "{{output}}.d"
+    command = "g++ -MD -MF $depfile {{defines}} {{include_dirs}} {{framework_dirs}} {{cflags}} {{cflags_cc}} {{cflags_objc}}  -c {{source}} -o {{output}}"
+    depsformat = "gcc"
+    description = "objc {{output}}"
+    outputs =
+        [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ]
+  }
+
+  if (is_mac || is_ios) {
+    not_needed([ "ar" ])  # We use libtool instead.
+  }
+
   tool("alink") {
-    command = "rm -f {{output}} && ar rcs {{output}} {{inputs}}"
-    description = "AR {{target_output_name}}{{output_extension}}"
+    if (is_mac || is_ios) {
+      command = "libtool -static -o {{output}} -no_warning_for_no_symbols {{inputs}}"
+    } else {
+      rspfile = "{{output}}.rsp"
+      rspfile_content = "{{inputs}}"
+      rm_py = rebase_path("../rm.py")
+      command = "$shell python3 \"$rm_py\" \"{{output}}\" && $ar rcs {{output}} @$rspfile"
+    }
 
     outputs =
-        [ "{{target_out_dir}}/{{target_output_name}}{{output_extension}}" ]
+        [ "{{root_out_dir}}/{{target_output_name}}{{output_extension}}" ]
     default_output_extension = ".a"
     output_prefix = "lib"
+    description = "link {{output}}"
   }
 
   tool("solink") {
-    soname = "{{target_output_name}}{{output_extension}}"  # e.g. "libfoo.so".
-    sofile = "{{output_dir}}/$soname"
-    rspfile = soname + ".rsp"
-    if (is_mac) {
-      os_specific_option = "-install_name @executable_path/$sofile"
-      rspfile_content = "{{inputs}} {{solibs}} {{libs}}"
-    } else {
-      os_specific_option = "-Wl,-soname=$soname"
-      rspfile_content = "-Wl,--whole-archive {{inputs}} {{solibs}} -Wl,--no-whole-archive {{libs}}"
+    soname = "{{target_output_name}}{{output_extension}}"
+
+    rpath = "-Wl,-soname,$soname"
+    if (is_mac || is_ios) {
+      rpath = "-Wl,-install_name,@rpath/$soname"
     }
 
-    command = "g++ -shared {{ldflags}} -o $sofile $os_specific_option @$rspfile"
+    rspfile = "{{output}}.rsp"
+    rspfile_content = "{{inputs}}"
 
-    description = "SOLINK $soname"
+    # --start-group/--end-group let us link multiple .a {{inputs}}
+    # without worrying about their relative order on the link line.
+    #
+    # This is mostly important for traditional linkers like GNU ld and Gold.
+    # The Mac/iOS linker neither needs nor accepts these flags.
+    # LLD doesn't need these flags, but accepts and ignores them.
+    _start_group = "-Wl,--start-group"
+    _end_group = "-Wl,--end-group"
+    if (is_mac || is_ios || is_fuchsia) {
+      _start_group = ""
+      _end_group = ""
+    }
 
-    # Use this for {{output_extension}} expansions unless a target manually
-    # overrides it (in which case {{output_extension}} will be what the target
-    # specifies).
-    default_output_extension = ".so"
-
-    # Use this for {{output_dir}} expansions unless a target manually overrides
-    # it (in which case {{output_dir}} will be what the target specifies).
-    default_output_dir = "{{root_out_dir}}"
-
-    outputs = [ sofile ]
-    link_output = sofile
-    depend_output = sofile
+    command = "g++ -shared {{ldflags}} $_start_group @$rspfile {{frameworks}} {{solibs}} $_end_group {{libs}} $rpath -o {{output}}"
+    outputs = [ "{{root_out_dir}}/$soname" ]
     output_prefix = "lib"
+    if (is_mac || is_ios) {
+      default_output_extension = ".dylib"
+    } else {
+      default_output_extension = ".so"
+    }
+    description = "link {{output}}"
   }
 
   tool("link") {
-    outfile = "{{target_output_name}}{{output_extension}}"
-    rspfile = "$outfile.rsp"
-    if (is_mac) {
-      command = "g++ {{ldflags}} -o $outfile @$rspfile {{solibs}} {{libs}}"
-    } else {
-      command = "g++ {{ldflags}} -o $outfile -Wl,--start-group @$rspfile {{solibs}} -Wl,--end-group {{libs}}"
-    }
-    description = "LINK $outfile"
-    default_output_dir = "{{root_out_dir}}"
+    exe_name = "{{root_out_dir}}/{{target_output_name}}{{output_extension}}"
+    rspfile = "$exe_name.rsp"
     rspfile_content = "{{inputs}}"
-    outputs = [ outfile ]
+
+    # --start-group/--end-group let us link multiple .a {{inputs}}
+    # without worrying about their relative order on the link line.
+    #
+    # This is mostly important for traditional linkers like GNU ld and Gold.
+    # The Mac/iOS linker neither needs nor accepts these flags.
+    # LLD doesn't need these flags, but accepts and ignores them.
+    _start_group = "-Wl,--start-group"
+    _end_group = "-Wl,--end-group"
+    if (is_mac || is_ios || is_fuchsia) {
+      _start_group = ""
+      _end_group = ""
+    }
+    command = "g++ {{ldflags}} $_start_group @$rspfile {{frameworks}} {{solibs}} $_end_group {{libs}} -o $exe_name"
+
+    outputs = [ "$exe_name" ]
+    description = "link {{output}}"
   }
 
   tool("stamp") {

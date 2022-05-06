@@ -37,19 +37,53 @@ shared_library("core") {
   python_ext_suffix = exec_script(
     "gn/python_ext_suffix.py", [], "trim string"
   )
+
+  xcode_sysroot = exec_script(
+    "gn/find_xcode_sysroot.py", [ "macosx" ], "trim string"
+  )
+
   sources = [
-    "src/tests/core.cpp"
+    "src/tests/core.mm",
+    "src/tests/export.cc"
   ]
+
+  cflags = [
+  ]
+
   cflags_cc = [
-    "-fno-strict-aliasing",
-    "-O3",
-    "-Wall",
-    "-std=c++11"
+    "-fPIC",
+    "-fvisibility=hidden",
+    "-std=gnu++17",
+    "-x",
+    "objective-c++"
   ]
   cflags_cc += pybind_headers
   ldflags = python_ldflags
+
+  if (xcode_sysroot != "") {
+    cflags_cc += [
+      "-isysroot",
+      xcode_sysroot,
+    ]
+    ldflags += [
+      "-isysroot",
+      xcode_sysroot,
+    ]
+  }
+
   libs = [
-    "python3.8"
+    "python3.8",
+    # "skia",
+    "jpeg",
+    "webp",
+    "webpdemux",
+    "webpmux",
+    "png"
+  ]
+  frameworks = [
+    "Foundation.framework",
+    "Cocoa.framework",
+    "QuartzCore.framework"
   ]
   output_name = string_join("", ["core", python_ext_suffix])
   output_prefix_override = true
